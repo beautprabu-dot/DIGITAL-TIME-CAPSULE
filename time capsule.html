@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Time Capsule</title>
+<style>
+  body { margin:0; font-family:Georgia,serif; color:#eee; min-height:100vh;
+         background:radial-gradient(circle at top,#2a1450,#0a0e27 60%); }
+  nav { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; padding:16px; }
+  button, input, textarea { font:inherit; border-radius:10px; border:1px solid #6b4fb3;
+         background:#14183a; color:#eee; padding:10px; }
+  button { cursor:pointer; transition:.3s; }
+  button:hover { background:#6b4fb3; box-shadow:0 0 15px #a77bff; }
+  .gold { background:linear-gradient(90deg,#f5c542,#ffdf7e); color:#222; border:0; font-weight:bold; }
+  section { max-width:650px; margin:auto; padding:20px; text-align:center; animation:fade .6s; }
+  @keyframes fade { from {opacity:0; transform:translateY(20px)} to {opacity:1} }
+  h1, h2 { color:#f5c542; text-shadow:0 0 15px #a77bff; }
+  .envelope { font-size:90px; animation:float 3s infinite ease-in-out; filter:drop-shadow(0 0 20px #f5c542); }
+  @keyframes float { 50% { transform:translateY(-15px) rotate(4deg); } }
+  form input, form textarea { display:block; width:100%; box-sizing:border-box; margin:10px 0; }
+  .card { background:#14183acc; border:1px solid #6b4fb3; border-radius:14px; padding:15px;
+          margin:12px 0; box-shadow:0 0 18px #6b4fb355; }
+  .time { color:#f5c542; font-size:22px; }
+  .card img { width:100px; height:100px; object-fit:cover; border-radius:10px; margin:4px; }
+  p.letter { white-space:pre-wrap; text-align:left; }
+</style>
+</head>
+<body>
+
+<nav>
+  <button onclick="show('home')">🏠 Home</button>
+  <button onclick="show('create')">✍️ Create</button>
+  <button onclick="show('mine')">📚 My Capsules</button>
+  <button onclick="show('locked')">🔒 Locked</button>
+  <button onclick="show('open')">🔓 Open</button>
+  <button onclick="show('about')">ℹ️ About</button>
+</nav>
+
+<section id="home">
+  <div class="envelope">✉️</div>
+  <h1>Messages to the Future</h1>
+  <p>Write a letter today. Lock it. Open it on a date you choose.</p>
+  <button class="gold" onclick="show('create')">Create a Time Capsule</button>
+</section>
+
+<section id="create" hidden>
+  <h2>Create a Capsule</h2>
+  <form onsubmit="saveCapsule(event)">
+    <input id="title" placeholder="Title" required>
+    <textarea id="letter" rows="6" placeholder="Dear future me..." required></textarea>
+    <label>Photos (optional)</label>
+    <input id="photos" type="file" accept="image/*" multiple>
+    <label>Unlock date</label>
+    <input id="date" type="date" required>
+    <button class="gold">🔒 Lock Capsule</button>
+  </form>
+</section>
+
+<section id="mine" hidden><h2>My Capsules</h2><div id="mineList"></div></section>
+<section id="locked" hidden><h2>Locked Capsules</h2><div id="lockedList"></div></section>
+<section id="open" hidden><h2>Open Your Capsule</h2><div id="openList"></div></section>
+
+<section id="about" hidden>
+  <h2>About</h2>
+  <p>A digital time capsule built with HTML, CSS, JavaScript and LocalStorage.
+     Capsules are saved in this browser only, so clearing browser data deletes them.</p>
+</section>
+
+<script>
+// ---------- data ----------
+let caps = JSON.parse(localStorage.getItem("caps") || "[]");
+const save = () => localStorage.setItem("caps", JSON.stringify(caps));
+const unlockTime = c => new Date(c.date + "T00:00:00").getTime();
+const isOpen = c => Date.now() >= unlockTime(c);
+const esc = t => t.replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+
+// ---------- pages ----------
+function show(id) {
+  document.querySelectorAll("section").forEach(s => s.hidden = s.id !== id);
+  render();
+}
+
+// ---------- make small photo (so storage doesn't fill up) ----------
+function smallPhoto(file) {
+  return new Promise(done => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"), k = Math.min(1, 500 / img.width);
+      c.width = img.width * k; c.height = img.height * k;
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      done(c.toDataURL("image/jpeg", 0.6));
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// ---------- create ----------
+async function saveCapsule(e) {
+  e.preventDefault();
+  const pics = await Promise.all([...photos.files].map(smallPhoto));
+  caps.push({ id: Date.now(), title: title.value, letter: letter.value, date: date.value, pics });
+  try { save(); } catch { caps.pop(); return alert("Storage full! Try fewer photos."); }
+  e.target.reset();
+  alert("Capsule locked! 🔒");
+  show("locked");
+}
+
+// ---------- show lists ----------
+function render() {
+  mineList.innerHTML = caps.map(c => `
+    <div class="card"><b>${esc(c.title)}</b><br>
+      ${isOpen(c) ? "🔓 Ready" : "🔒 Locked"} · Opens ${c.date}<br><br>
+      <button onclick="del(${c.id})">🗑 Delete</button></div>`).join("") || "<p>No capsules yet.</p>";
+
+  lockedList.innerHTML = caps.filter(c => !isOpen(c)).map(c => `
+    <div class="card"><b>${esc(c.title)}</b>
+      <div class="time" data-t="${unlockTime(c)}"></div></div>`).join("") || "<p>Nothing locked right now.</p>";
+
+  openList.innerHTML = caps.filter(isOpen).map(c => `
+    <div class="card"><b>${esc(c.title)}</b> · ${c.date}<br><br>
+      <button class="gold" onclick="reveal(${c.id})">✉️ Open</button>
+      <div id="r${c.id}" hidden>
+        <p class="letter">${esc(c.letter)}</p>
+        ${c.pics.map(p => `<img src="${p}">`).join("")}
+      </div></div>`).join("") || "<p>No capsule is ready to open yet.</p>";
+  tick();
+}
+const reveal = id => document.getElementById("r" + id).hidden = false;
+const del = id => { if (confirm("Delete this capsule?")) { caps = caps.filter(c => c.id !== id); save(); render(); } };
+
+// ---------- countdown ----------
+function tick() {
+  document.querySelectorAll(".time").forEach(el => {
+    let s = Math.floor((el.dataset.t - Date.now()) / 1000);
+    if (s <= 0) return render();
+    el.textContent = `${Math.floor(s/86400)}d ${Math.floor(s%86400/3600)}h ${Math.floor(s%3600/60)}m ${s%60}s`;
+  });
+}
+setInterval(tick, 1000);
+
+date.min = new Date().toISOString().split("T")[0];  // no past dates
+show("home");
+</script>
+</body>
+</html>
